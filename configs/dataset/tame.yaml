@@ -1,0 +1,6 @@
+dataset:
+  name: tame
+  root: data/raw/tame
+  num_utility_classes: 4
+  num_speakers: 51
+  num_pain_bins: 4

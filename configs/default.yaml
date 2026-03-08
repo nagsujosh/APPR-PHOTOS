@@ -1,0 +1,65 @@
+seed: 42
+device: auto
+
+dataset:
+  name: cremad
+  root: data/raw/cremad
+  sample_rate: 16000
+  max_length_sec: 5.0
+  train_ratio: 0.7
+  val_ratio: 0.15
+  batch_size: 32
+  num_workers: 0
+
+feature:
+  type: melspec  # melspec or hubert
+  # Mel-spectrogram params
+  n_fft: 2048
+  hop_length: 512
+  n_mels: 128
+  # HuBERT params
+  hubert_model: facebook/hubert-base-ls960
+  freeze_ssl: true
+  use_cache: false
+  cache_dir: data/processed
+
+model:
+  filter:
+    input_dim: 128
+    hidden_dim: 256
+    output_dim: 128
+    num_layers: 3
+    use_vib: true
+    vib_beta: 0.01      # normalised KL (mean not sum) so 0.01 is appropriate
+    dropout: 0.1
+  task:
+    hidden_dim: 256
+    dropout: 0.2
+  adversary:
+    trunk_dim: 128
+    heads:
+      gender: 2
+      speaker_id: 91
+    dropout: 0.3
+
+training:
+  num_epochs: 100
+  lr_main: 0.001
+  lr_adversary: 0.0005
+  lambda_privacy: 1.0
+  lambda_warmup_epochs: 10
+  adversary_refresh_interval: 20
+  adversary_retrain_epochs: 5
+  grad_clip: 1.0
+  # Student-teacher distillation
+  use_teacher: false
+  teacher_pretrain_epochs: 30
+  teacher_lr: 0.001
+  distillation_alpha: 0.0       # 0 = disabled; >0 enables distillation
+  distillation_temperature: 4.0
+
+output:
+  dir: outputs
+  checkpoint_dir: outputs/checkpoints
+  log_dir: outputs/logs
+  tensorboard_dir: outputs/tensorboard

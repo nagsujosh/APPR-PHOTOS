@@ -1,0 +1,10 @@
+feature:
+  type: hubert
+  hubert_model: facebook/hubert-base-ls960
+  freeze_ssl: true
+  use_cache: true
+  cache_dir: data/processed
+
+model:
+  filter:
+    input_dim: 768

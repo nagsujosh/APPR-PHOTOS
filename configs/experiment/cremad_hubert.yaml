@@ -1,0 +1,24 @@
+_base_: ../default.yaml
+
+dataset:
+  name: cremad
+  root: data/raw/cremad
+
+feature:
+  type: hubert
+  use_cache: true
+  cache_dir: data/processed/cremad_hubert
+
+model:
+  filter:
+    input_dim: 768
+  adversary:
+    heads:
+      gender: 2
+      speaker_id: 91
+
+output:
+  dir: outputs/cremad_hubert
+  checkpoint_dir: outputs/cremad_hubert/checkpoints
+  log_dir: outputs/cremad_hubert/logs
+  tensorboard_dir: outputs/cremad_hubert/tensorboard

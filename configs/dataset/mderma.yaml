@@ -1,0 +1,5 @@
+dataset:
+  name: mderma
+  root: data/raw/mderma
+  num_utility_classes: 4
+  num_speakers: 100
