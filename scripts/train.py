@@ -23,6 +23,7 @@ from aapr.features.feature_cache import CachedFeatureDataset
 from aapr.models.privacy_filter import PrivacyFilter
 from aapr.models.task_model import TaskModel
 from aapr.models.adversary import MultiHeadAdversary
+from aapr.data.combined import CombinedEmotionDataset
 from aapr.models.teacher import TeacherModel
 from aapr.training.trainer import Trainer
 
@@ -37,10 +38,20 @@ DATASET_MAP = {
 def build_dataset(cfg):
     ds_cfg = cfg["dataset"]
     name = ds_cfg["name"]
+    sample_rate = ds_cfg.get("sample_rate", 16000)
+    max_len = ds_cfg.get("max_length_sec", 5.0)
+
+    if name == "combined":
+        # Joint CREMA-D + MDER-MA with 4-class common emotion space
+        return CombinedEmotionDataset(
+            cremad_root=ds_cfg.get("cremad_root", "data/raw/cremad"),
+            mderma_root=ds_cfg.get("mderma_root", "data/raw/mderma"),
+            sample_rate=sample_rate,
+            max_length_sec=max_len,
+        )
+
     cls = DATASET_MAP[name]
-    kwargs = {"root": ds_cfg["root"], "sample_rate": ds_cfg.get("sample_rate", 16000)}
-    if "max_length_sec" in ds_cfg:
-        kwargs["max_length_sec"] = ds_cfg["max_length_sec"]
+    kwargs = {"root": ds_cfg["root"], "sample_rate": sample_rate, "max_length_sec": max_len}
     if name == "tame" and "num_pain_bins" in ds_cfg:
         kwargs["num_pain_bins"] = ds_cfg["num_pain_bins"]
     return cls(**kwargs)
@@ -183,20 +194,31 @@ def main():
     )
 
     task_cfg = cfg["model"]["task"]
+    num_classes = (
+        dataset.num_utility_classes if not use_cache
+        else cfg["dataset"].get("num_utility_classes", 6)
+    )
     task_model = TaskModel(
         input_dim=filter_cfg.get("output_dim", 128),
-        hidden_dim=task_cfg.get("hidden_dim", 128),
-        num_classes=cfg["dataset"].get("num_utility_classes", 6),
-        dropout=task_cfg.get("dropout", 0.3),
+        hidden_dim=task_cfg.get("hidden_dim", 256),
+        num_classes=num_classes,
+        dropout=task_cfg.get("dropout", 0.2),
     )
+    logger.info(f"Task model: {num_classes} classes ({getattr(dataset, 'utility_label_names', [])})")
 
     adv_cfg = cfg["model"]["adversary"]
+    # Auto-derive speaker_id head size from the loaded dataset so it works for
+    # any dataset (cremad=91, mderma=varies, combined=cremad+mderma speakers).
+    default_heads = dict(adv_cfg.get("heads", {"gender": 2, "speaker_id": 91}))
+    if not use_cache:
+        default_heads["speaker_id"] = dataset.num_speakers
     adversary = MultiHeadAdversary(
         input_dim=filter_cfg.get("output_dim", 128),
         trunk_dim=adv_cfg.get("trunk_dim", 128),
-        heads=adv_cfg.get("heads", {"gender": 2, "speaker_id": 91}),
+        heads=default_heads,
         dropout=adv_cfg.get("dropout", 0.3),
     )
+    logger.info(f"Adversary heads: {default_heads}")
 
     # Teacher pre-training (student-teacher distillation)
     train_cfg = cfg["training"]

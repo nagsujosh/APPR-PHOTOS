@@ -1,0 +1,58 @@
+_base_: ../default.yaml
+
+# Joint CREMA-D + MDER-MA training (4-class common emotion space).
+# Requires MDER-MA to be downloaded; see scripts/prepare_datasets.py --instructions
+
+dataset:
+  name: combined
+  cremad_root: data/raw/cremad
+  mderma_root: data/raw/mderma
+  sample_rate: 16000
+  max_length_sec: 5.0
+  num_utility_classes: 4   # anger/happy/neutral/sad
+  batch_size: 64
+  num_workers: 0
+
+feature:
+  type: melspec
+
+model:
+  filter:
+    input_dim: 128
+    hidden_dim: 256
+    output_dim: 128
+    num_layers: 3
+    use_vib: true
+    vib_beta: 0.01
+    dropout: 0.1
+  task:
+    hidden_dim: 256
+    dropout: 0.2
+  adversary:
+    trunk_dim: 128
+    # speaker_id head size is auto-set from dataset.num_speakers at runtime
+    heads:
+      gender: 2
+      speaker_id: 191    # approx; overridden at runtime
+    dropout: 0.3
+
+training:
+  num_epochs: 100
+  lr_main: 0.001
+  lr_adversary: 0.0005
+  lambda_privacy: 1.0
+  lambda_warmup_epochs: 10
+  adversary_refresh_interval: 20
+  adversary_retrain_epochs: 5
+  grad_clip: 1.0
+  use_teacher: true
+  teacher_pretrain_epochs: 30
+  teacher_lr: 0.001
+  distillation_alpha: 0.7
+  distillation_temperature: 4.0
+
+output:
+  dir: outputs/combined_melspec
+  checkpoint_dir: outputs/combined_melspec/checkpoints
+  log_dir: outputs/combined_melspec/logs
+  tensorboard_dir: outputs/combined_melspec/tensorboard
