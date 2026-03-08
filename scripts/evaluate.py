@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import torch
 
-from aapr.utils.device import get_device
+from aapr.utils.device import get_device, load_checkpoint
 from aapr.utils.seed import set_seed
 from aapr.utils.logging import setup_logger
 from aapr.data.cremad import CremaDDataset
@@ -110,7 +110,7 @@ def main():
         heads=cfg["model"]["adversary"].get("heads", {"gender": 2, "speaker_id": 91}),
     )
 
-    state = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    state = load_checkpoint(args.checkpoint, device, weights_only=False)
     privacy_filter.load_state_dict(state["privacy_filter"])
     task_model.load_state_dict(state["task_model"])
     adversary.load_state_dict(state["adversary"])

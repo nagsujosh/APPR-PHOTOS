@@ -9,6 +9,7 @@ from tqdm import tqdm
 from .losses import CombinedLoss, AdversaryLoss
 from .metrics import MetricTracker
 from .schedulers import LambdaScheduler, AdversaryRefreshScheduler
+from ..utils.device import get_autocast_context, get_grad_scaler, load_checkpoint
 
 logger = logging.getLogger("aapr")
 
@@ -52,6 +53,9 @@ class Trainer:
         self.device = device
         self.use_cached_features = use_cached_features
         self.grad_clip = grad_clip
+
+        # AMP: GradScaler for CUDA (float16), None for MPS/CPU
+        self.scaler = get_grad_scaler(device)
 
         # Optimizers
         main_params = list(privacy_filter.parameters()) + list(task_model.parameters())
@@ -121,40 +125,61 @@ class Trainer:
             teacher_logits = None
             if self.teacher is not None:
                 with torch.no_grad():
-                    teacher_logits = self.teacher(features)
+                    with get_autocast_context(self.device):
+                        teacher_logits = self.teacher(features)
 
-            # Forward pass through student
-            filtered, kl_loss = self.privacy_filter(features)
-            utility_logits = self.task_model(filtered)
-            privacy_logits = self.adversary(filtered)
+            # Forward pass through student (AMP where available)
+            with get_autocast_context(self.device):
+                filtered, kl_loss = self.privacy_filter(features)
+                utility_logits = self.task_model(filtered)
+                privacy_logits = self.adversary(filtered)
 
             if is_retrain:
-                # Adversary-only phase: refresh adversary to catch up with filter.
-                # Zero both optimizers to avoid carrying stale filter gradients.
-                adv_loss = self.adv_criterion(privacy_logits, privacy_labels)
+                # Adversary-only phase: zero both to avoid stale filter gradients
+                with get_autocast_context(self.device):
+                    adv_loss = self.adv_criterion(privacy_logits, privacy_labels)
                 self.optimizer_main.zero_grad()
                 self.optimizer_adv.zero_grad()
-                adv_loss.backward()
-                self.optimizer_adv.step()
+                if self.scaler:
+                    self.scaler.scale(adv_loss).backward()
+                    self.scaler.step(self.optimizer_adv)
+                    self.scaler.update()
+                else:
+                    adv_loss.backward()
+                    self.optimizer_adv.step()
                 loss_val = adv_loss.item()
             else:
                 # Joint training: filter+task minimize utility+KL, maximize privacy (via GRL)
-                losses = self.criterion(
-                    utility_logits, utility_labels,
-                    privacy_logits, privacy_labels, kl_loss,
-                    teacher_logits=teacher_logits,
-                )
+                with get_autocast_context(self.device):
+                    losses = self.criterion(
+                        utility_logits, utility_labels,
+                        privacy_logits, privacy_labels, kl_loss,
+                        teacher_logits=teacher_logits,
+                    )
                 self.optimizer_main.zero_grad()
                 self.optimizer_adv.zero_grad()
-                losses["total"].backward()
-                if self.grad_clip > 0:
-                    nn.utils.clip_grad_norm_(
-                        list(self.privacy_filter.parameters()) +
-                        list(self.task_model.parameters()),
-                        self.grad_clip,
-                    )
-                self.optimizer_main.step()
-                self.optimizer_adv.step()
+                if self.scaler:
+                    self.scaler.scale(losses["total"]).backward()
+                    self.scaler.unscale_(self.optimizer_main)
+                    if self.grad_clip > 0:
+                        nn.utils.clip_grad_norm_(
+                            list(self.privacy_filter.parameters()) +
+                            list(self.task_model.parameters()),
+                            self.grad_clip,
+                        )
+                    self.scaler.step(self.optimizer_main)
+                    self.scaler.step(self.optimizer_adv)
+                    self.scaler.update()
+                else:
+                    losses["total"].backward()
+                    if self.grad_clip > 0:
+                        nn.utils.clip_grad_norm_(
+                            list(self.privacy_filter.parameters()) +
+                            list(self.task_model.parameters()),
+                            self.grad_clip,
+                        )
+                    self.optimizer_main.step()
+                    self.optimizer_adv.step()
                 loss_val = losses["total"].item()
 
             tracker.update(
@@ -184,14 +209,15 @@ class Trainer:
             utility_labels = batch["utility_label"].to(self.device)
             privacy_labels = {k: v.to(self.device) for k, v in batch["privacy_labels"].items()}
 
-            filtered, kl_loss = self.privacy_filter(features)
-            utility_logits = self.task_model(filtered)
-            privacy_logits = self.adversary(filtered)
+            with get_autocast_context(self.device):
+                filtered, kl_loss = self.privacy_filter(features)
+                utility_logits = self.task_model(filtered)
+                privacy_logits = self.adversary(filtered)
 
-            losses = self.criterion(
-                utility_logits, utility_labels,
-                privacy_logits, privacy_labels, kl_loss,
-            )
+                losses = self.criterion(
+                    utility_logits, utility_labels,
+                    privacy_logits, privacy_labels, kl_loss,
+                )
 
             tracker.update(
                 utility_logits, utility_labels,
@@ -215,7 +241,7 @@ class Trainer:
             torch.save(state, self.checkpoint_dir / "best_model.pt")
 
     def load_checkpoint(self, path: str | Path):
-        state = torch.load(path, map_location=self.device, weights_only=False)
+        state = load_checkpoint(path, self.device, weights_only=False)
         self.privacy_filter.load_state_dict(state["privacy_filter"])
         self.task_model.load_state_dict(state["task_model"])
         self.adversary.load_state_dict(state["adversary"])
