@@ -12,6 +12,7 @@ dataset:
   num_utility_classes: 4   # anger/happy/neutral/sad
   batch_size: 64
   num_workers: 0
+  use_weighted_sampler: true   # balance anger/happy/neutral/sad across CREMA-D+MDER-MA
 
 feature:
   type: melspec

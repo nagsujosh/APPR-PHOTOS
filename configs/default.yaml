@@ -10,6 +10,7 @@ dataset:
   val_ratio: 0.15
   batch_size: 32
   num_workers: 0
+  use_weighted_sampler: false
 
 feature:
   type: melspec  # melspec or hubert

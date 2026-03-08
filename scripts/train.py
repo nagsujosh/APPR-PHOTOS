@@ -177,6 +177,14 @@ def main():
             val_ratio=cfg["dataset"].get("val_ratio", 0.15),
             num_workers=cfg["dataset"].get("num_workers", 0),
             seed=cfg.get("seed", 42),
+            use_weighted_sampler=cfg["dataset"].get("use_weighted_sampler", False),
+        )
+        logger.info(
+            f"Dataset: {len(dataset)} samples | "
+            f"train={len(loaders['train'].dataset)} "
+            f"val={len(loaders['val'].dataset)} "
+            f"test={len(loaders['test'].dataset)} | "
+            f"weighted_sampler={cfg['dataset'].get('use_weighted_sampler', False)}"
         )
         feature_extractor = build_feature_extractor(cfg)
         input_dim = feature_extractor.output_dim
