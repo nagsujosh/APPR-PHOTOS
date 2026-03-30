@@ -59,20 +59,29 @@ def make_class_balanced_sampler(subset: Subset) -> WeightedRandomSampler:
 
 def collate_fn(batch: list[dict[str, Any]]) -> dict[str, Any]:
     """Collate batch of samples into tensors."""
-    waveforms = torch.stack([b["waveform"] for b in batch])
-    utility_labels = torch.tensor([b["utility_label"] for b in batch], dtype=torch.long)
+    def _to_long_tensor(values):
+        first = values[0]
+        if isinstance(first, torch.Tensor):
+            return torch.stack([v.long() for v in values])
+        return torch.tensor(values, dtype=torch.long)
+
+    payload = {}
+    if "image" in batch[0]:
+        payload["image"] = torch.stack([b["image"] for b in batch])
+    if "features" in batch[0]:
+        payload["features"] = torch.stack([b["features"] for b in batch])
+
+    utility_labels = _to_long_tensor([b["utility_label"] for b in batch])
 
     privacy_keys = batch[0]["privacy_labels"].keys()
     privacy_labels = {
-        k: torch.tensor([b["privacy_labels"][k] for b in batch], dtype=torch.long)
+        k: _to_long_tensor([b["privacy_labels"][k] for b in batch])
         for k in privacy_keys
     }
 
-    return {
-        "waveform": waveforms,
-        "utility_label": utility_labels,
-        "privacy_labels": privacy_labels,
-    }
+    payload["utility_label"] = utility_labels
+    payload["privacy_labels"] = privacy_labels
+    return payload
 
 
 def create_dataloaders(
@@ -83,14 +92,14 @@ def create_dataloaders(
     num_workers: int = 0,
     seed: int = 42,
     use_weighted_sampler: bool = False,
+    pin_memory: bool = False,
 ) -> dict[str, DataLoader]:
     """Create train/val/test dataloaders with speaker-stratified splits.
 
     Args:
         use_weighted_sampler: if True, the training loader uses a class-balanced
-            WeightedRandomSampler instead of uniform shuffle.  Helps when emotion
-            class counts are uneven (e.g. neutral is ~15% fewer in CREMA-D, and
-            MDER-MA adds only 4 of 4 emotions at ~21% of total samples).
+            WeightedRandomSampler instead of uniform shuffle to mitigate
+            class-imbalance in utility labels.
     """
     train_set, val_set, test_set = speaker_stratified_split(
         dataset, train_ratio, val_ratio, seed
@@ -101,11 +110,13 @@ def create_dataloaders(
         train_loader = DataLoader(
             train_set, batch_size=batch_size, sampler=sampler,
             collate_fn=collate_fn, num_workers=num_workers, drop_last=True,
+            pin_memory=pin_memory, persistent_workers=num_workers > 0,
         )
     else:
         train_loader = DataLoader(
             train_set, batch_size=batch_size, shuffle=True,
             collate_fn=collate_fn, num_workers=num_workers, drop_last=True,
+            pin_memory=pin_memory, persistent_workers=num_workers > 0,
         )
 
     return {
@@ -113,9 +124,11 @@ def create_dataloaders(
         "val": DataLoader(
             val_set, batch_size=batch_size, shuffle=False,
             collate_fn=collate_fn, num_workers=num_workers,
+            pin_memory=pin_memory, persistent_workers=num_workers > 0,
         ),
         "test": DataLoader(
             test_set, batch_size=batch_size, shuffle=False,
             collate_fn=collate_fn, num_workers=num_workers,
+            pin_memory=pin_memory, persistent_workers=num_workers > 0,
         ),
     }

@@ -44,9 +44,9 @@ def cross_dataset_evaluation(
             if use_cached_features:
                 features = batch["features"].to(device)
             elif feature_extractor:
-                features = feature_extractor(batch["waveform"].to(device))
+                features = feature_extractor(batch["image"].to(device))
             else:
-                features = batch["waveform"].to(device)
+                features = batch["image"].to(device)
 
             filtered, _ = privacy_filter(features)
             logits = task_model(filtered)

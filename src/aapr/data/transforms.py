@@ -1,45 +1,44 @@
 import torch
-import torchaudio
 
 
-class AudioAugmentation:
-    """Composable audio augmentations for training."""
+class ImageAugmentation:
+    """Simple tensor-based image augmentations."""
 
     def __init__(
         self,
-        noise_snr_db: float = 20.0,
-        time_stretch_range: tuple[float, float] = (0.9, 1.1),
-        pitch_shift_range: int = 2,
-        apply_noise: bool = True,
-        apply_time_mask: bool = True,
-        sample_rate: int = 16000,
+        apply_flip: bool = True,
+        apply_color_jitter: bool = True,
+        apply_cutout: bool = True,
+        jitter_strength: float = 0.1,
     ):
-        self.noise_snr_db = noise_snr_db
-        self.time_stretch_range = time_stretch_range
-        self.pitch_shift_range = pitch_shift_range
-        self.apply_noise = apply_noise
-        self.apply_time_mask = apply_time_mask
-        self.sample_rate = sample_rate
+        self.apply_flip = apply_flip
+        self.apply_color_jitter = apply_color_jitter
+        self.apply_cutout = apply_cutout
+        self.jitter_strength = jitter_strength
 
-    def add_noise(self, waveform: torch.Tensor) -> torch.Tensor:
-        noise = torch.randn_like(waveform)
-        signal_power = waveform.pow(2).mean()
-        noise_power = noise.pow(2).mean()
-        snr_linear = 10 ** (self.noise_snr_db / 10)
-        scale = (signal_power / (noise_power * snr_linear + 1e-8)).sqrt()
-        return waveform + scale * noise
+    def random_flip(self, image: torch.Tensor) -> torch.Tensor:
+        return image.flip(-1)
 
-    def time_mask(self, waveform: torch.Tensor, max_mask_frac: float = 0.1) -> torch.Tensor:
-        length = waveform.shape[-1]
-        mask_len = int(length * max_mask_frac * torch.rand(1).item())
-        start = torch.randint(0, max(length - mask_len, 1), (1,)).item()
-        waveform = waveform.clone()
-        waveform[..., start : start + mask_len] = 0
-        return waveform
+    def color_jitter(self, image: torch.Tensor) -> torch.Tensor:
+        scale = 1.0 + (torch.rand(1).item() * 2 - 1) * self.jitter_strength
+        return (image * scale).clamp(0.0, 1.0)
 
-    def __call__(self, waveform: torch.Tensor) -> torch.Tensor:
-        if self.apply_noise and torch.rand(1).item() < 0.5:
-            waveform = self.add_noise(waveform)
-        if self.apply_time_mask and torch.rand(1).item() < 0.5:
-            waveform = self.time_mask(waveform)
-        return waveform
+    def cutout(self, image: torch.Tensor, max_frac: float = 0.2) -> torch.Tensor:
+        _, height, width = image.shape
+        cut_h = max(1, int(height * max_frac * torch.rand(1).item()))
+        cut_w = max(1, int(width * max_frac * torch.rand(1).item()))
+        top = torch.randint(0, max(height - cut_h, 1), (1,)).item()
+        left = torch.randint(0, max(width - cut_w, 1), (1,)).item()
+        out = image.clone()
+        out[:, top : top + cut_h, left : left + cut_w] = 0.0
+        return out
+
+    def __call__(self, image: torch.Tensor) -> torch.Tensor:
+        out = image
+        if self.apply_flip and torch.rand(1).item() < 0.5:
+            out = self.random_flip(out)
+        if self.apply_color_jitter and torch.rand(1).item() < 0.5:
+            out = self.color_jitter(out)
+        if self.apply_cutout and torch.rand(1).item() < 0.5:
+            out = self.cutout(out)
+        return out

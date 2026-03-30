@@ -36,16 +36,25 @@ def precompute_features(
     feature_extractor = feature_extractor.to(device)
     feature_extractor.eval()
 
-    loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        pin_memory=device.type == "cuda",
+    )
 
     with torch.no_grad():
         for idx, batch in enumerate(tqdm(loader, desc=f"Caching {split}")):
-            waveform = batch["waveform"].to(device)
-            features = feature_extractor(waveform).cpu()
+            image = batch["image"].to(device)
+            features = feature_extractor(image).cpu()
 
-            sample = {
-                "features": features.squeeze(0),  # (D, T')
-                "utility_label": batch["utility_label"].squeeze(0),
-                "privacy_labels": {k: v.squeeze(0) for k, v in batch["privacy_labels"].items()},
-            }
-            torch.save(sample, cache_path / f"{idx:06d}.pt")
+            for offset in range(features.shape[0]):
+                sample_idx = idx * batch_size + offset
+                sample = {
+                    "features": features[offset],  # (D, T')
+                    "utility_label": batch["utility_label"][offset],
+                    "privacy_labels": {
+                        key: value[offset] for key, value in batch["privacy_labels"].items()
+                    },
+                }
+                torch.save(sample, cache_path / f"{sample_idx:06d}.pt")

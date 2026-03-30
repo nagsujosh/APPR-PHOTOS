@@ -1,0 +1,12 @@
+feature:
+  type: image_cnn
+  in_channels: 3
+  hidden_dims: [32, 64, 96]
+  output_dim: 128
+  dropout: 0.0
+  use_cache: false
+  cache_dir: data/processed/features
+
+model:
+  filter:
+    input_dim: 128

@@ -1,71 +1,37 @@
 #!/usr/bin/env python
 """Standalone evaluation script."""
-import sys
-import json
 import argparse
+import json
+import os
+import platform
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import torch
+if platform.system() == "Darwin":
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-from aapr.utils.device import get_device, load_checkpoint
-from aapr.utils.seed import set_seed
-from aapr.utils.logging import setup_logger
-from aapr.data.cremad import CremaDDataset
-from aapr.data.mderma import MDERMADataset
-from aapr.data.tame import TAMEDataset
 from aapr.data.utils import create_dataloaders
-from aapr.features.mel_spectrogram import MelSpectrogramExtractor
-from aapr.features.ssl_embeddings import SSLEmbeddingExtractor
+from aapr.evaluation.evaluator import Evaluator
+from aapr.models.adversary import MultiHeadAdversary
 from aapr.models.privacy_filter import PrivacyFilter
 from aapr.models.task_model import TaskModel
-from aapr.models.adversary import MultiHeadAdversary
-from aapr.evaluation.evaluator import Evaluator
-
-
-DATASET_MAP = {
-    "cremad": CremaDDataset,
-    "mderma": MDERMADataset,
-    "tame": TAMEDataset,
-}
-
-
-def build_dataset(cfg):
-    ds_cfg = cfg["dataset"]
-    name = ds_cfg["name"]
-    cls = DATASET_MAP[name]
-    kwargs = {"root": ds_cfg["root"], "sample_rate": ds_cfg.get("sample_rate", 16000)}
-    if "max_length_sec" in ds_cfg:
-        kwargs["max_length_sec"] = ds_cfg["max_length_sec"]
-    if name == "tame" and "num_pain_bins" in ds_cfg:
-        kwargs["num_pain_bins"] = ds_cfg["num_pain_bins"]
-    return cls(**kwargs)
-
-
-def build_feature_extractor(cfg):
-    feat_cfg = cfg["feature"]
-    if feat_cfg["type"] == "melspec":
-        return MelSpectrogramExtractor(
-            sample_rate=cfg["dataset"].get("sample_rate", 16000),
-            n_fft=feat_cfg.get("n_fft", 2048),
-            hop_length=feat_cfg.get("hop_length", 512),
-            n_mels=feat_cfg.get("n_mels", 128),
-        )
-    elif feat_cfg["type"] == "hubert":
-        return SSLEmbeddingExtractor(
-            model_name=feat_cfg.get("hubert_model", "facebook/hubert-base-ls960"),
-            freeze_ssl=feat_cfg.get("freeze_ssl", True),
-        )
-    else:
-        raise ValueError(f"Unknown feature type: {feat_cfg['type']}")
+from aapr.utils.device import get_device, load_checkpoint
+from aapr.utils.logging import setup_logger
+from aapr.utils.seed import set_seed
+from scripts.train import build_dataset, build_feature_extractor
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True)
-    parser.add_argument("--config", type=str, default=None,
-                        help="Path to config JSON (from training output)")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config JSON generated during training",
+    )
     parser.add_argument("--device", type=str, default="auto")
     args = parser.parse_args()
 
@@ -73,10 +39,10 @@ def main():
     logger = setup_logger("aapr")
 
     checkpoint_dir = Path(args.checkpoint).parent
-    config_path = args.config if args.config else checkpoint_dir.parent / "config.json"
+    config_path = Path(args.config) if args.config else checkpoint_dir.parent / "config.json"
 
-    with open(config_path) as f:
-        cfg = json.load(f)
+    with open(config_path) as handle:
+        cfg = json.load(handle)
 
     set_seed(cfg.get("seed", 42))
 
@@ -85,10 +51,12 @@ def main():
         dataset,
         batch_size=cfg["dataset"].get("batch_size", 32),
         seed=cfg.get("seed", 42),
+        num_workers=cfg["dataset"].get("num_workers", 0),
+        pin_memory=device.type == "cuda",
     )
 
-    filter_cfg = cfg["model"]["filter"]
     feature_extractor = build_feature_extractor(cfg)
+    filter_cfg = cfg["model"]["filter"]
     input_dim = feature_extractor.output_dim
 
     privacy_filter = PrivacyFilter(
@@ -102,12 +70,17 @@ def main():
     task_model = TaskModel(
         input_dim=filter_cfg.get("output_dim", 128),
         hidden_dim=cfg["model"]["task"].get("hidden_dim", 128),
-        num_classes=cfg["dataset"].get("num_utility_classes", 6),
+        num_classes=dataset.num_utility_classes,
+        dropout=cfg["model"]["task"].get("dropout", 0.2),
     )
+
+    adv_heads = dict(cfg["model"]["adversary"].get("heads", {"gender": 2, "speaker_id": 10}))
+    adv_heads["speaker_id"] = dataset.num_speakers
     adversary = MultiHeadAdversary(
         input_dim=filter_cfg.get("output_dim", 128),
         trunk_dim=cfg["model"]["adversary"].get("trunk_dim", 128),
-        heads=cfg["model"]["adversary"].get("heads", {"gender": 2, "speaker_id": 91}),
+        heads=adv_heads,
+        dropout=cfg["model"]["adversary"].get("dropout", 0.3),
     )
 
     state = load_checkpoint(args.checkpoint, device, weights_only=False)
@@ -122,17 +95,16 @@ def main():
 
     evaluator = Evaluator(device)
     results = evaluator.evaluate(
-        privacy_filter, task_model, adversary,
-        loaders["test"], feature_extractor,
+        privacy_filter, task_model, adversary, loaders["test"], feature_extractor
     )
 
     logger.info("Test Results:")
-    for k, v in sorted(results.items()):
-        logger.info(f"  {k}: {v:.4f}")
+    for key, value in sorted(results.items()):
+        logger.info(f"  {key}: {value:.4f}")
 
     output_path = checkpoint_dir.parent / "test_results.json"
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2)
+    with open(output_path, "w") as handle:
+        json.dump(results, handle, indent=2)
     logger.info(f"Results saved to {output_path}")
 
 

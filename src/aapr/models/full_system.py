@@ -22,14 +22,14 @@ class FullSystem(nn.Module):
         self.task_model = task_model
         self.adversary = adversary
 
-    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(self, image: torch.Tensor) -> dict[str, torch.Tensor]:
         """
         Args:
-            waveform: (B, 1, T) raw audio
+            image: (B, 3, H, W) input images
         Returns:
             dict with keys: 'utility_logits', 'privacy_logits', 'kl_loss', 'features', 'filtered'
         """
-        features = self.feature_extractor(waveform)
+        features = self.feature_extractor(image)
         filtered, kl_loss = self.privacy_filter(features)
         utility_logits = self.task_model(filtered)
         privacy_logits = self.adversary(filtered)

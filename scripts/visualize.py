@@ -3,9 +3,14 @@
 import sys
 import argparse
 import json
+import os
+import platform
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+if platform.system() == "Darwin":
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import numpy as np
 import torch
@@ -28,8 +33,8 @@ def collect_embeddings(privacy_filter, feature_extractor, loader, device):
 
     with torch.no_grad():
         for batch in loader:
-            waveform = batch["waveform"].to(device)
-            features = feature_extractor(waveform) if feature_extractor else waveform
+            image = batch["image"].to(device)
+            features = feature_extractor(image) if feature_extractor else image
             filtered, _ = privacy_filter(features)
 
             all_before.append(features.mean(dim=2).cpu().numpy())
@@ -69,11 +74,15 @@ def main():
     from scripts.train import build_dataset, build_feature_extractor
     from aapr.data.utils import create_dataloaders
     from aapr.models.privacy_filter import PrivacyFilter
-    from aapr.models.task_model import TaskModel
-    from aapr.models.adversary import MultiHeadAdversary
 
     dataset = build_dataset(cfg)
-    loaders = create_dataloaders(dataset, batch_size=32, seed=42)
+    loaders = create_dataloaders(
+        dataset,
+        batch_size=cfg["dataset"].get("batch_size", 32),
+        seed=42,
+        num_workers=cfg["dataset"].get("num_workers", 0),
+        pin_memory=device.type == "cuda",
+    )
 
     feature_extractor = build_feature_extractor(cfg)
     filter_cfg = cfg["model"]["filter"]

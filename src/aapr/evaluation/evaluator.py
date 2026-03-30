@@ -42,9 +42,9 @@ class Evaluator:
             if use_cached_features:
                 features = batch["features"].to(self.device)
             elif feature_extractor:
-                features = feature_extractor(batch["waveform"].to(self.device))
+                features = feature_extractor(batch["image"].to(self.device))
             else:
-                features = batch["waveform"].to(self.device)
+                features = batch["image"].to(self.device)
 
             utility_labels = batch["utility_label"]
             privacy_labels = batch["privacy_labels"]

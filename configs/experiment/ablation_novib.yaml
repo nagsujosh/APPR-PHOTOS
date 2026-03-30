@@ -1,11 +1,11 @@
 _base_: ../default.yaml
 
 dataset:
-  name: cremad
-  root: data/raw/cremad
+  name: photos
+  root: data/raw/photos
 
 feature:
-  type: melspec
+  type: image_cnn
 
 model:
   filter:
@@ -14,7 +14,7 @@ model:
   adversary:
     heads:
       gender: 2
-      speaker_id: 91
+      speaker_id: 10
 
 output:
   dir: outputs/ablation_novib

@@ -31,6 +31,8 @@ def get_device(preferred: str = "auto") -> torch.device:
         _validate(device)
 
     _log_device_info(device)
+    if device.type == "cuda":
+        _configure_cuda_runtime()
     return device
 
 
@@ -94,6 +96,19 @@ def _log_device_info(device: torch.device):
     else:
         import platform
         logger.info(f"Device: cpu — {platform.processor() or platform.machine()}")
+
+
+def _configure_cuda_runtime():
+    """Enable safe CUDA performance defaults."""
+    # Faster conv autotuning for fixed-size image batches.
+    torch.backends.cudnn.benchmark = True
+
+    # Allow TensorFloat-32 on Ampere+ for significant throughput gains.
+    if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "matmul"):
+        if hasattr(torch.backends.cuda.matmul, "allow_tf32"):
+            torch.backends.cuda.matmul.allow_tf32 = True
+    if hasattr(torch.backends, "cudnn") and hasattr(torch.backends.cudnn, "allow_tf32"):
+        torch.backends.cudnn.allow_tf32 = True
 
 
 # ------------------------------------------------------------------ #

@@ -1,0 +1,10 @@
+dataset:
+  name: photos
+  root: data/raw/photos
+  metadata_filename: metadata.csv
+  image_size: 224
+  train_ratio: 0.7
+  val_ratio: 0.15
+  batch_size: 32
+  num_workers: 0
+  use_weighted_sampler: false

@@ -7,8 +7,12 @@ from .gradient_reversal import GradientReversalLayer
 class MultiHeadAdversary(nn.Module):
     """Multi-head adversary with shared trunk and per-attribute heads.
 
-    Supports gender, speaker_id, and age classification heads.
-    Includes GRL and reset_parameters for adversary refresh.
+    Uses mean temporal pooling (not attention) deliberately: an attention-based
+    adversary becomes too powerful after refresh retraining cycles, producing
+    reversed gradients that dwarf the utility signal and collapse the filter.
+    Mean pooling keeps the adversary effective but bounded.
+
+    Includes GRL and reset_parameters for adversary refresh cycles.
     """
 
     def __init__(
@@ -19,20 +23,12 @@ class MultiHeadAdversary(nn.Module):
         dropout: float = 0.3,
         grl_lambda: float = 1.0,
     ):
-        """
-        Args:
-            input_dim: dimension of filtered representation
-            trunk_dim: hidden dimension for shared trunk
-            heads: dict mapping attribute name to num_classes
-                   e.g. {"gender": 2, "speaker_id": 91}
-        """
         super().__init__()
         if heads is None:
             heads = {"gender": 2, "speaker_id": 91}
 
         self.grl = GradientReversalLayer(grl_lambda)
 
-        # Temporal pooling (mean)
         self.trunk = nn.Sequential(
             nn.Linear(input_dim, trunk_dim),
             nn.ReLU(),
@@ -54,11 +50,9 @@ class MultiHeadAdversary(nn.Module):
         Returns:
             dict of attribute_name -> (B, num_classes) logits
         """
-        z_rev = self.grl(z)
-        # Mean temporal pooling
-        z_pooled = z_rev.mean(dim=2)  # (B, D)
+        z_rev    = self.grl(z)
+        z_pooled = z_rev.mean(dim=2)   # (B, D) — mean pooling, intentionally simple
         trunk_out = self.trunk(z_pooled)
-
         return {name: head(trunk_out) for name, head in self.heads.items()}
 
     def reset_parameters(self):

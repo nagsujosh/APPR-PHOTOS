@@ -2,27 +2,25 @@ seed: 42
 device: auto
 
 dataset:
-  name: cremad
-  root: data/raw/cremad
-  sample_rate: 16000
-  max_length_sec: 5.0
+  name: photos
+  root: data/raw/photos
+  metadata_filename: metadata.csv
+  image_size: 224
+  image_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
   train_ratio: 0.7
   val_ratio: 0.15
   batch_size: 32
-  num_workers: 0
+  num_workers: 4
   use_weighted_sampler: false
 
 feature:
-  type: melspec  # melspec or hubert
-  # Mel-spectrogram params
-  n_fft: 2048
-  hop_length: 512
-  n_mels: 128
-  # HuBERT params
-  hubert_model: facebook/hubert-base-ls960
-  freeze_ssl: true
+  type: image_cnn
+  in_channels: 3
+  hidden_dims: [32, 64, 96]
+  output_dim: 128
+  dropout: 0.0
   use_cache: false
-  cache_dir: data/processed
+  cache_dir: data/processed/features
 
 model:
   filter:
@@ -31,7 +29,7 @@ model:
     output_dim: 128
     num_layers: 3
     use_vib: true
-    vib_beta: 0.01      # normalised KL (mean not sum) so 0.01 is appropriate
+    vib_beta: 0.01
     dropout: 0.1
   task:
     hidden_dim: 256
@@ -40,7 +38,7 @@ model:
     trunk_dim: 128
     heads:
       gender: 2
-      speaker_id: 91
+      speaker_id: 10
     dropout: 0.3
 
 training:
@@ -52,15 +50,14 @@ training:
   adversary_refresh_interval: 20
   adversary_retrain_epochs: 5
   grad_clip: 1.0
-  # Student-teacher distillation
   use_teacher: false
   teacher_pretrain_epochs: 30
   teacher_lr: 0.001
-  distillation_alpha: 0.0       # 0 = disabled; >0 enables distillation
+  distillation_alpha: 0.0
   distillation_temperature: 4.0
 
 output:
-  dir: outputs
-  checkpoint_dir: outputs/checkpoints
-  log_dir: outputs/logs
-  tensorboard_dir: outputs/tensorboard
+  dir: outputs/photos_baseline
+  checkpoint_dir: outputs/photos_baseline/checkpoints
+  log_dir: outputs/photos_baseline/logs
+  tensorboard_dir: outputs/photos_baseline/tensorboard

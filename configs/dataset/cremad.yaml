@@ -1,5 +1,0 @@
-dataset:
-  name: cremad
-  root: data/raw/cremad
-  num_utility_classes: 6
-  num_speakers: 91

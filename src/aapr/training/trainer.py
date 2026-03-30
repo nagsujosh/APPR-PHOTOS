@@ -18,7 +18,7 @@ class Trainer:
     """Adversarial min-max training with optional student-teacher distillation.
 
     Architecture:
-      - feature_extractor: mel or SSL (may be frozen)
+      - feature_extractor: image encoder (may be frozen)
       - teacher: frozen model trained on raw features, provides soft targets
       - privacy_filter + task_model: student, trained adversarially
       - adversary: multi-head classifier with GRL; reset every refresh_interval epochs
@@ -76,7 +76,7 @@ class Trainer:
         self.adv_criterion = AdversaryLoss()
 
         # Schedulers
-        self.lambda_scheduler = LambdaScheduler(lambda_privacy, lambda_warmup_epochs)
+        self.lambda_scheduler = LambdaScheduler(lambda_privacy, num_epochs)
         self.refresh_scheduler = AdversaryRefreshScheduler(
             adversary_refresh_interval, adversary_retrain_epochs
         )
@@ -89,10 +89,10 @@ class Trainer:
     def _extract_features(self, batch):
         if self.use_cached_features:
             return batch["features"].to(self.device)
-        waveform = batch["waveform"].to(self.device)
+        image = batch["image"].to(self.device)
         if self.feature_extractor:
-            return self.feature_extractor(waveform)
-        return waveform
+            return self.feature_extractor(image)
+        return image
 
     def train_epoch(self, loader: DataLoader, epoch: int) -> dict:
         self.privacy_filter.train()

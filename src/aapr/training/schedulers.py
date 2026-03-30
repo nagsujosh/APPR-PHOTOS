@@ -1,18 +1,23 @@
-class LambdaScheduler:
-    """Warmup schedule for privacy penalty lambda.
+import math
 
-    Linearly ramps from 0 to target_lambda over warmup_epochs.
+
+class LambdaScheduler:
+    """DANN-style sigmoid schedule for privacy penalty lambda.
+
+    λ(p) = target · (2 / (1 + exp(-10·p)) - 1)   where p = epoch / total_epochs
+
+    This gives a slow start (natural warmup), fast growth through the middle,
+    and a smooth plateau — empirically more stable than a linear ramp.
+    Reference: Ganin et al. "Domain-Adversarial Training of Neural Networks" (2016).
     """
 
-    def __init__(self, target_lambda: float = 1.0, warmup_epochs: int = 10):
+    def __init__(self, target_lambda: float = 1.0, total_epochs: int = 100):
         self.target_lambda = target_lambda
-        self.warmup_epochs = warmup_epochs
+        self.total_epochs  = max(total_epochs, 1)
 
     def get_lambda(self, epoch: int) -> float:
-        if self.warmup_epochs <= 0:
-            return self.target_lambda
-        progress = min(epoch / self.warmup_epochs, 1.0)
-        return self.target_lambda * progress
+        p = epoch / self.total_epochs
+        return self.target_lambda * (2.0 / (1.0 + math.exp(-10.0 * p)) - 1.0)
 
 
 class AdversaryRefreshScheduler:
@@ -26,7 +31,7 @@ class AdversaryRefreshScheduler:
 
     def __init__(self, refresh_interval: int = 20, retrain_epochs: int = 5):
         self.refresh_interval = refresh_interval
-        self.retrain_epochs = retrain_epochs
+        self.retrain_epochs   = retrain_epochs
 
     def should_refresh(self, epoch: int) -> bool:
         if self.refresh_interval <= 0:
@@ -37,7 +42,7 @@ class AdversaryRefreshScheduler:
         """Check if current epoch is in adversary-only retrain phase."""
         if self.refresh_interval <= 0:
             return False
-        cycle_pos = epoch % self.refresh_interval
+        cycle_pos   = epoch % self.refresh_interval
         last_refresh = epoch - cycle_pos
         if last_refresh == 0:
             return False

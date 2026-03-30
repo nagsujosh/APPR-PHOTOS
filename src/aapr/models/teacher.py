@@ -7,7 +7,7 @@ from .task_model import AttentionPooling
 class TeacherModel(nn.Module):
     """Pre-trained teacher model for knowledge distillation.
 
-    Trained directly on mel features without a privacy filter.
+    Trained directly on image features without a privacy filter.
     Frozen during adversarial training; provides soft probability targets
     that guide the student (filter + task model) toward better utility.
     """
@@ -34,7 +34,7 @@ class TeacherModel(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            features: (B, D, T) mel spectrogram features (unfiltered)
+            features: (B, D, T) unfiltered image features
         Returns:
             logits: (B, num_classes)
         """

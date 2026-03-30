@@ -1,15 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-import torch
 from torch.utils.data import Dataset
 
 
-class SpeechPrivacyDataset(Dataset, ABC):
-    """Abstract base for all speech privacy datasets.
+class PrivacyDataset(Dataset, ABC):
+    """Abstract base for privacy-preserving utility datasets.
 
     Each sample returns:
-        waveform: (1, T) float tensor
+        image: (C, H, W) float tensor
         utility_label: int (emotion class or pain level)
         privacy_labels: dict with keys like 'speaker_id', 'gender', 'age'
         metadata: dict with any extra info (e.g. filename)

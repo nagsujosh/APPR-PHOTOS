@@ -1,19 +1,14 @@
 _base_: ../default.yaml
 
-# TAME pain-level detection with privacy filter.
-# Requires PhysioNet credentialed download; see scripts/prepare_datasets.py --instructions
-
 dataset:
-  name: tame
-  root: data/raw/tame
-  sample_rate: 16000
-  max_length_sec: 5.0
-  num_pain_bins: 4
-  batch_size: 32
-  num_workers: 0
+  name: photos
+  root: data/raw/photos
+  batch_size: 64
 
 feature:
-  type: melspec
+  type: image_cnn
+  hidden_dims: [32, 64, 96]
+  output_dim: 128
 
 model:
   filter:
@@ -31,8 +26,7 @@ model:
     trunk_dim: 128
     heads:
       gender: 2
-      speaker_id: 51     # overridden at runtime
-      age: 5             # age binned into 5 groups
+      speaker_id: 10
     dropout: 0.3
 
 training:
@@ -51,7 +45,7 @@ training:
   distillation_temperature: 4.0
 
 output:
-  dir: outputs/tame_melspec
-  checkpoint_dir: outputs/tame_melspec/checkpoints
-  log_dir: outputs/tame_melspec/logs
-  tensorboard_dir: outputs/tame_melspec/tensorboard
+  dir: outputs/photos_baseline
+  checkpoint_dir: outputs/photos_baseline/checkpoints
+  log_dir: outputs/photos_baseline/logs
+  tensorboard_dir: outputs/photos_baseline/tensorboard

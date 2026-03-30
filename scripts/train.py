@@ -1,87 +1,70 @@
 #!/usr/bin/env python
 """Main training entry point."""
-import sys
 import json
+import os
+import platform
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+# macOS can load duplicate OpenMP runtimes via mixed conda/pip stacks.
+if platform.system() == "Darwin":
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from aapr.utils.config import get_config, Config
-from aapr.utils.seed import set_seed
-from aapr.utils.device import get_device
-from aapr.utils.logging import setup_logger, get_writer
-from aapr.data.cremad import CremaDDataset
-from aapr.data.mderma import MDERMADataset
-from aapr.data.tame import TAMEDataset
-from aapr.data.utils import create_dataloaders
-from aapr.features.mel_spectrogram import MelSpectrogramExtractor
-from aapr.features.ssl_embeddings import SSLEmbeddingExtractor
+from aapr.data.image_dataset import PhotoPrivacyDataset
+from aapr.data.utils import collate_fn, create_dataloaders
 from aapr.features.feature_cache import CachedFeatureDataset
+from aapr.features.image_cnn import ImageCNNExtractor
+from aapr.models.adversary import MultiHeadAdversary
 from aapr.models.privacy_filter import PrivacyFilter
 from aapr.models.task_model import TaskModel
-from aapr.models.adversary import MultiHeadAdversary
-from aapr.data.combined import CombinedEmotionDataset
 from aapr.models.teacher import TeacherModel
 from aapr.training.trainer import Trainer
-
+from aapr.utils.config import get_config
+from aapr.utils.device import get_device
+from aapr.utils.logging import get_writer, setup_logger
+from aapr.utils.seed import set_seed
 
 DATASET_MAP = {
-    "cremad": CremaDDataset,
-    "mderma": MDERMADataset,
-    "tame": TAMEDataset,
+    "photos": PhotoPrivacyDataset,
 }
 
 
 def build_dataset(cfg):
     ds_cfg = cfg["dataset"]
     name = ds_cfg["name"]
-    sample_rate = ds_cfg.get("sample_rate", 16000)
-    max_len = ds_cfg.get("max_length_sec", 5.0)
-
-    if name == "combined":
-        # Joint CREMA-D + MDER-MA with 4-class common emotion space
-        return CombinedEmotionDataset(
-            cremad_root=ds_cfg.get("cremad_root", "data/raw/cremad"),
-            mderma_root=ds_cfg.get("mderma_root", "data/raw/mderma"),
-            sample_rate=sample_rate,
-            max_length_sec=max_len,
-        )
-
     cls = DATASET_MAP[name]
-    kwargs = {"root": ds_cfg["root"], "sample_rate": sample_rate, "max_length_sec": max_len}
-    if name == "tame" and "num_pain_bins" in ds_cfg:
-        kwargs["num_pain_bins"] = ds_cfg["num_pain_bins"]
-    return cls(**kwargs)
+
+    image_extensions = tuple(ds_cfg.get("image_extensions", [".jpg", ".jpeg", ".png", ".bmp", ".webp"]))
+    return cls(
+        root=ds_cfg["root"],
+        image_size=ds_cfg.get("image_size", 224),
+        metadata_filename=ds_cfg.get("metadata_filename", "metadata.csv"),
+        image_extensions=image_extensions,
+    )
 
 
 def build_feature_extractor(cfg):
     feat_cfg = cfg["feature"]
-    if feat_cfg["type"] == "melspec":
-        return MelSpectrogramExtractor(
-            sample_rate=cfg["dataset"].get("sample_rate", 16000),
-            n_fft=feat_cfg.get("n_fft", 2048),
-            hop_length=feat_cfg.get("hop_length", 512),
-            n_mels=feat_cfg.get("n_mels", 128),
-        )
-    elif feat_cfg["type"] == "hubert":
-        return SSLEmbeddingExtractor(
-            model_name=feat_cfg.get("hubert_model", "facebook/hubert-base-ls960"),
-            freeze_ssl=feat_cfg.get("freeze_ssl", True),
-        )
-    else:
+    if feat_cfg["type"] != "image_cnn":
         raise ValueError(f"Unknown feature type: {feat_cfg['type']}")
+
+    hidden_dims = tuple(feat_cfg.get("hidden_dims", [32, 64, 96]))
+    return ImageCNNExtractor(
+        in_channels=feat_cfg.get("in_channels", 3),
+        output_dim=feat_cfg.get("output_dim", 128),
+        hidden_dims=hidden_dims,
+        dropout=feat_cfg.get("dropout", 0.0),
+    )
 
 
 def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger):
-    """Pre-train a teacher model on raw (unfiltered) mel features.
-
-    The teacher is a deeper MLP that acts as an emotion recognition oracle.
-    After pre-training it is frozen and used to generate soft targets for the
-    student (privacy_filter + task_model) during adversarial training.
-    """
+    """Pre-train a teacher model on raw image features."""
     train_cfg = cfg["training"]
     teacher_epochs = train_cfg.get("teacher_pretrain_epochs", 30)
     teacher_lr = train_cfg.get("teacher_lr", 1e-3)
@@ -90,7 +73,7 @@ def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger):
     teacher = TeacherModel(
         input_dim=filter_cfg.get("input_dim", 128),
         hidden_dim=256,
-        num_classes=cfg["dataset"].get("num_utility_classes", 6),
+        num_classes=cfg["dataset"].get("num_utility_classes", 2),
         dropout=0.1,
     ).to(device)
 
@@ -107,11 +90,11 @@ def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger):
         total_loss, correct, total = 0.0, 0, 0
 
         for batch in tqdm(train_loader, desc=f"Teacher epoch {epoch}", leave=False):
-            waveform = batch["waveform"].to(device)
+            image = batch["image"].to(device)
             labels = batch["utility_label"].to(device)
 
             with torch.no_grad():
-                features = feature_extractor(waveform)
+                features = feature_extractor(image)
 
             logits = teacher(features)
             loss = criterion(logits, labels)
@@ -149,22 +132,32 @@ def main():
     logger.info(f"Device: {device}")
     logger.info(f"Config: {json.dumps(cfg, indent=2)}")
 
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(cfg, f, indent=2)
+    with open(output_dir / "config.json", "w") as handle:
+        json.dump(cfg, handle, indent=2)
 
-    # Dataset / dataloaders
     use_cache = cfg["feature"].get("use_cache", False)
+    dataset = None
+    class_names = []
+
     if use_cache:
-        from aapr.data.utils import collate_fn
-        from torch.utils.data import DataLoader
         cache_dir = cfg["feature"]["cache_dir"]
         train_ds = CachedFeatureDataset(cache_dir, "train")
         val_ds = CachedFeatureDataset(cache_dir, "val")
+        test_ds = CachedFeatureDataset(cache_dir, "test")
+        batch_size = cfg["dataset"].get("batch_size", 32)
         loaders = {
-            "train": DataLoader(train_ds, batch_size=cfg["dataset"]["batch_size"],
-                                shuffle=True, collate_fn=collate_fn, drop_last=True),
-            "val": DataLoader(val_ds, batch_size=cfg["dataset"]["batch_size"],
-                              shuffle=False, collate_fn=collate_fn),
+            "train": DataLoader(
+                train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn, drop_last=True,
+                pin_memory=device.type == "cuda",
+            ),
+            "val": DataLoader(
+                val_ds, batch_size=batch_size, shuffle=False, collate_fn=collate_fn,
+                pin_memory=device.type == "cuda",
+            ),
+            "test": DataLoader(
+                test_ds, batch_size=batch_size, shuffle=False, collate_fn=collate_fn,
+                pin_memory=device.type == "cuda",
+            ),
         }
         feature_extractor = None
         input_dim = cfg["model"]["filter"]["input_dim"]
@@ -178,6 +171,7 @@ def main():
             num_workers=cfg["dataset"].get("num_workers", 0),
             seed=cfg.get("seed", 42),
             use_weighted_sampler=cfg["dataset"].get("use_weighted_sampler", False),
+            pin_memory=device.type == "cuda",
         )
         logger.info(
             f"Dataset: {len(dataset)} samples | "
@@ -186,10 +180,10 @@ def main():
             f"test={len(loaders['test'].dataset)} | "
             f"weighted_sampler={cfg['dataset'].get('use_weighted_sampler', False)}"
         )
+        class_names = dataset.utility_label_names
         feature_extractor = build_feature_extractor(cfg)
         input_dim = feature_extractor.output_dim
 
-    # Models
     filter_cfg = cfg["model"]["filter"]
     privacy_filter = PrivacyFilter(
         input_dim=input_dim,
@@ -203,8 +197,7 @@ def main():
 
     task_cfg = cfg["model"]["task"]
     num_classes = (
-        dataset.num_utility_classes if not use_cache
-        else cfg["dataset"].get("num_utility_classes", 6)
+        dataset.num_utility_classes if dataset is not None else cfg["dataset"].get("num_utility_classes", 2)
     )
     task_model = TaskModel(
         input_dim=filter_cfg.get("output_dim", 128),
@@ -212,14 +205,15 @@ def main():
         num_classes=num_classes,
         dropout=task_cfg.get("dropout", 0.2),
     )
-    logger.info(f"Task model: {num_classes} classes ({getattr(dataset, 'utility_label_names', [])})")
+    logger.info(f"Task model: {num_classes} classes ({class_names})")
 
     adv_cfg = cfg["model"]["adversary"]
-    # Auto-derive speaker_id head size from the loaded dataset so it works for
-    # any dataset (cremad=91, mderma=varies, combined=cremad+mderma speakers).
-    default_heads = dict(adv_cfg.get("heads", {"gender": 2, "speaker_id": 91}))
-    if not use_cache:
+    default_heads = dict(adv_cfg.get("heads", {"gender": 2, "speaker_id": 10}))
+    if dataset is not None:
         default_heads["speaker_id"] = dataset.num_speakers
+    elif "num_speakers" in cfg["dataset"]:
+        default_heads["speaker_id"] = cfg["dataset"]["num_speakers"]
+
     adversary = MultiHeadAdversary(
         input_dim=filter_cfg.get("output_dim", 128),
         trunk_dim=adv_cfg.get("trunk_dim", 128),
@@ -228,18 +222,15 @@ def main():
     )
     logger.info(f"Adversary heads: {default_heads}")
 
-    # Teacher pre-training (student-teacher distillation)
     train_cfg = cfg["training"]
     teacher = None
     if train_cfg.get("use_teacher", False) and feature_extractor is not None:
         feature_extractor.to(device)
         teacher = pretrain_teacher(cfg, loaders["train"], feature_extractor, device, logger)
-        # Save teacher checkpoint
         teacher_path = output_dir / "teacher.pt"
         torch.save(teacher.state_dict(), teacher_path)
         logger.info(f"Teacher saved to {teacher_path}")
 
-    # Main adversarial training
     num_epochs = train_cfg.get("num_epochs", 100)
     writer = get_writer(cfg["output"].get("tensorboard_dir", str(output_dir / "tensorboard")))
 
@@ -265,9 +256,7 @@ def main():
     )
 
     final_metrics = trainer.fit(
-        loaders["train"], loaders["val"],
-        num_epochs=num_epochs,
-        writer=writer,
+        loaders["train"], loaders["val"], num_epochs=num_epochs, writer=writer
     )
 
     logger.info(f"Training complete. Final val metrics: {final_metrics}")

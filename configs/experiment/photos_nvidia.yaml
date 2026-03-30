@@ -1,0 +1,16 @@
+_base_: ./photos_baseline.yaml
+
+device: cuda
+
+dataset:
+  batch_size: 128
+  num_workers: 8
+
+training:
+  num_epochs: 100
+
+output:
+  dir: outputs/photos_nvidia
+  checkpoint_dir: outputs/photos_nvidia/checkpoints
+  log_dir: outputs/photos_nvidia/logs
+  tensorboard_dir: outputs/photos_nvidia/tensorboard

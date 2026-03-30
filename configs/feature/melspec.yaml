@@ -1,9 +1,0 @@
-feature:
-  type: melspec
-  n_fft: 2048
-  hop_length: 512
-  n_mels: 128
-
-model:
-  filter:
-    input_dim: 128
