@@ -117,6 +117,14 @@ python scripts/sweep_lambda.py --config configs/experiment/celeba_baseline.yaml 
 python scripts/visualize.py --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt
 ```
 
+For report-ready figures from a trained run:
+
+```bash
+python scripts/generate_report_figures.py \
+  --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt \
+  --output_dir outputs/report_figures
+```
+
 ## Tests
 
 ```bash

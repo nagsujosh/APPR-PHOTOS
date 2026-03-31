@@ -36,3 +36,6 @@ Thumbs.db
 
 # TensorBoard
 runs/
+
+# Local plotting cache
+.matplotlib-cache/

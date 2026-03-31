@@ -1,8 +1,52 @@
 import json
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
+
+
+EPOCH_LINE_RE = re.compile(
+    r"Epoch\s+(?P<epoch>\d+)(?P<retrain>\s+\[ADV RETRAIN\])?\s+\|\s+"
+    r"Train UAR:\s+(?P<train_uar>[0-9.]+)\s+\|\s+"
+    r"Val UAR:\s+(?P<val_uar>[0-9.]+)\s+\|\s+"
+    r"Lambda:\s+(?P<lambda>[0-9.]+)"
+)
+
+
+def parse_epoch_metrics_from_log(log_file: str | Path) -> list[dict]:
+    """Parse the latest training run from the text train.log file."""
+    log_file = Path(log_file)
+    if not log_file.exists():
+        return []
+
+    runs: list[list[dict]] = []
+    current_run: list[dict] = []
+
+    with open(log_file, encoding="utf-8") as handle:
+        for line in handle:
+            if "INFO - Device:" in line:
+                if current_run:
+                    runs.append(current_run)
+                current_run = []
+
+            match = EPOCH_LINE_RE.search(line)
+            if not match:
+                continue
+
+            current_run.append(
+                {
+                    "epoch": int(match.group("epoch")),
+                    "train_utility_uar": float(match.group("train_uar")),
+                    "val_utility_uar": float(match.group("val_uar")),
+                    "lambda": float(match.group("lambda")),
+                    "is_retrain": bool(match.group("retrain")),
+                }
+            )
+
+    if current_run:
+        runs.append(current_run)
+
+    return runs[-1] if runs else []
 
 
 def plot_training_curves(
@@ -12,18 +56,29 @@ def plot_training_curves(
 ):
     """Plot loss and metric curves from training history.
 
-    Accepts either a JSON log file or a list of epoch metric dicts.
+    Accepts either a JSON metrics file, a text train.log file, or a list of
+    epoch metric dicts.
     """
     if log_file:
-        with open(log_file) as f:
-            metrics_history = json.load(f)
+        with open(log_file, encoding="utf-8") as handle:
+            first_char = handle.read(1)
+        if first_char == "[":
+            with open(log_file, encoding="utf-8") as handle:
+                metrics_history = json.load(handle)
+        else:
+            metrics_history = parse_epoch_metrics_from_log(log_file)
 
     if not metrics_history:
         return
 
-    epochs = range(len(metrics_history))
+    epochs = [m.get("epoch", idx) for idx, m in enumerate(metrics_history)]
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    retrain_epochs = [m["epoch"] for m in metrics_history if m.get("is_retrain")]
+    for ax in axes.ravel():
+        for epoch in retrain_epochs:
+            ax.axvspan(epoch - 0.5, epoch + 0.5, color="#f59e0b", alpha=0.08)
 
     # Loss
     if "loss" in metrics_history[0]:
@@ -64,6 +119,16 @@ def plot_training_curves(
         axes[1, 1].plot(epochs, lambdas)
         axes[1, 1].set_title("Privacy Lambda Schedule")
         axes[1, 1].set_xlabel("Epoch")
+
+    if retrain_epochs:
+        axes[1, 1].text(
+            0.02,
+            0.92,
+            "Shaded bands = adversary retraining",
+            transform=axes[1, 1].transAxes,
+            fontsize=9,
+            color="#92400e",
+        )
 
     plt.tight_layout()
     if save_path:

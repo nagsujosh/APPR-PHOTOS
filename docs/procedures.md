@@ -117,3 +117,20 @@ python scripts/visualize.py \
   --pareto_results outputs/pareto/sweep_results.json \
   --output_dir outputs/plots
 ```
+
+## 10. Report Figures
+
+Generate a clean figure bundle for the report or slides:
+
+```bash
+python scripts/generate_report_figures.py \
+  --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt \
+  --output_dir outputs/report_figures
+```
+
+This saves:
+- `training_curves.png`
+- `utility_confusion_matrix.png`
+- `embeddings_tsne.png`
+- `qualitative_saliency.png`
+- `figure_summary.json`

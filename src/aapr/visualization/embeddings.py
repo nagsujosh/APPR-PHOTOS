@@ -5,7 +5,8 @@ from sklearn.manifold import TSNE
 try:
     import umap
     HAS_UMAP = True
-except ImportError:
+except Exception:
+    # Fall back to t-SNE if UMAP or one of its optional compiled deps is unavailable.
     HAS_UMAP = False
 
 

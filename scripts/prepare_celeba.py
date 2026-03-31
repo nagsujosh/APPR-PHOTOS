@@ -95,7 +95,9 @@ def main() -> None:
 
         for filename, attr_row, identity in zip(dataset.filename, dataset.attr, dataset.identity):
             utility_value = int(attr_row[utility_idx].item())
-            gender_value = int(attr_row[gender_idx].item())
+            male_attr = int(attr_row[gender_idx].item())
+            # Internal convention in this repo is 0=male, 1=female.
+            gender_value = 0 if male_attr == 1 else 1
             writer.writerow(
                 {
                     "filename": str(Path("celeba") / "img_align_celeba" / filename),
