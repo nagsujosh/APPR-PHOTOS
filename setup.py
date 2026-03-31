@@ -16,5 +16,6 @@ setup(
         "seaborn",
         "pyyaml",
         "tqdm",
+        "gdown",
     ],
 )

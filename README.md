@@ -2,7 +2,7 @@
 
 **Adversary-Adaptive Representation Learning for Privacy-Preserving Image Tasks**
 
-CS750 Course Project — University of New Hampshire
+CS 750/850 Course Project — University of New Hampshire
 
 ## Overview
 
@@ -35,52 +35,60 @@ bash scripts/setup_nvidia_env.sh appr-photos-cuda 3.10 cu121
 
 ## Dataset Download
 
-One-command default dataset bootstrap (CIFAR-10 -> image folder + metadata):
+Recommended practical dataset: CelebA.
+
+This repo downloads CelebA through torchvision's official dataset integration
+and builds a repo-compatible `metadata.csv` automatically. The default setup uses:
+- utility label: `Smiling` vs `not_smiling`
+- privacy labels: `identity` and `gender`
 
 ```bash
-bash scripts/download_data.sh
+bash scripts/download_data.sh celeba data/raw/celeba
 ```
 
-This writes to `data/raw/photos` and creates `metadata.csv`.
+This writes the prepared dataset to `data/raw/celeba` and creates `metadata.csv`.
 
 ## Custom Dataset Preparation
 
-Organize images under `data/raw/photos`:
+Organize images under `data/raw/celeba`:
 
 ```text
-data/raw/photos/
+data/raw/celeba/
   <class_name>/
     <speaker_id>/image_001.jpg
     <speaker_id>/image_002.jpg
 ```
 
-Or place `metadata.csv` in `data/raw/photos/` with fields such as:
+Or place `metadata.csv` in `data/raw/celeba/` with fields such as:
 `filename,utility_label,speaker_id,gender,age`.
 
 Verification and metadata generation:
 
 ```bash
-python scripts/prepare_datasets.py --verify --root data/raw/photos
-python scripts/prepare_datasets.py --build-metadata --root data/raw/photos
-python scripts/prepare_datasets.py --stats --root data/raw/photos
+python scripts/prepare_datasets.py --verify --root data/raw/celeba
+python scripts/prepare_datasets.py --build-metadata --root data/raw/celeba
+python scripts/prepare_datasets.py --stats --root data/raw/celeba
 ```
 
 ## Training
 
 ```bash
-# NVIDIA-optimized config
-python scripts/train.py --config configs/experiment/photos_nvidia.yaml
+# CelebA NVIDIA-optimized config
+python scripts/train.py --config configs/experiment/celeba_nvidia.yaml
 
-# Baseline image training
-python scripts/train.py --config configs/experiment/photos_baseline.yaml
+# CelebA baseline training
+python scripts/train.py --config configs/experiment/celeba_baseline.yaml
 
 # Precompute features for faster training loops (optional)
-python scripts/precompute_features.py --config configs/experiment/photos_baseline.yaml
-python scripts/train.py --config configs/experiment/photos_cached.yaml
+python scripts/precompute_features.py --config configs/experiment/celeba_baseline.yaml
+python scripts/train.py --config configs/experiment/celeba_cached.yaml
 
 # Override config values from CLI
-python scripts/train.py --config configs/default.yaml training.num_epochs=50 training.lambda_privacy=0.5
+python scripts/train.py --config configs/experiment/celeba_baseline.yaml training.num_epochs=20 training.lambda_privacy=0.05
 ```
+
+The CelebA configs use smiling classification as the utility task and
+identity/gender as the privacy targets.
 
 ## CPU / Non-NVIDIA Setup
 
@@ -94,19 +102,19 @@ pip install -e .
 ## Evaluation
 
 ```bash
-python scripts/evaluate.py --checkpoint outputs/photos_nvidia/checkpoints/best_model.pt
+python scripts/evaluate.py --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt
 ```
 
 ## Lambda Sweep (Pareto Frontier)
 
 ```bash
-python scripts/sweep_lambda.py --config configs/experiment/photos_baseline.yaml --epochs 50
+python scripts/sweep_lambda.py --config configs/experiment/celeba_baseline.yaml --epochs 20
 ```
 
 ## Visualization
 
 ```bash
-python scripts/visualize.py --checkpoint outputs/photos_nvidia/checkpoints/best_model.pt
+python scripts/visualize.py --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt
 ```
 
 ## Tests

@@ -2,7 +2,7 @@ _base_: ../default.yaml
 
 dataset:
   name: photos
-  root: data/raw/photos
+  root: data/raw/celeba
 
 feature:
   type: image_cnn
@@ -14,10 +14,10 @@ model:
   adversary:
     heads:
       gender: 2
-      speaker_id: 10
+      speaker_id: 10177
 
 output:
-  dir: outputs/ablation_novib
-  checkpoint_dir: outputs/ablation_novib/checkpoints
-  log_dir: outputs/ablation_novib/logs
-  tensorboard_dir: outputs/ablation_novib/tensorboard
+  dir: outputs/celeba_ablation_novib
+  checkpoint_dir: outputs/celeba_ablation_novib/checkpoints
+  log_dir: outputs/celeba_ablation_novib/logs
+  tensorboard_dir: outputs/celeba_ablation_novib/tensorboard

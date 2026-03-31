@@ -7,7 +7,9 @@ import os
 import platform
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 if platform.system() == "Darwin":
     os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -94,6 +96,8 @@ def main():
     )
 
     state = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    if "feature_extractor" in state:
+        feature_extractor.load_state_dict(state["feature_extractor"])
     privacy_filter.load_state_dict(state["privacy_filter"])
     privacy_filter.to(device)
     feature_extractor.to(device)

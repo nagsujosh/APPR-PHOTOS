@@ -1,0 +1,13 @@
+_base_: ./celeba_baseline.yaml
+
+device: cuda
+
+dataset:
+  batch_size: 128
+  num_workers: 8
+
+output:
+  dir: outputs/celeba_nvidia
+  checkpoint_dir: outputs/celeba_nvidia/checkpoints
+  log_dir: outputs/celeba_nvidia/logs
+  tensorboard_dir: outputs/celeba_nvidia/tensorboard

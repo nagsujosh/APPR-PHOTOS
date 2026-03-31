@@ -16,14 +16,36 @@ If needed, swap CUDA wheel tag:
 bash scripts/setup_nvidia_env.sh appr-photos-cuda 3.10 cu121
 ```
 
-## 2. Dataset Structure
+## 2. Recommended Dataset: CelebA
 
-Use one of the following:
+This repo's recommended dataset is CelebA, downloaded through torchvision.
+The practical task setup is:
+- utility: `Smiling` vs `not_smiling`
+- privacy: `identity` and `gender`
+
+Download and prepare it with:
+
+```bash
+bash scripts/download_data.sh celeba data/raw/celeba
+```
+
+This produces:
+
+```text
+data/raw/celeba/
+  celeba/
+    img_align_celeba/*.jpg
+  metadata.csv
+```
+
+## 3. Generic Dataset Structure
+
+If you are preparing your own image dataset instead, use one of the following:
 
 ### Folder layout
 
 ```text
-data/raw/photos/
+data/raw/celeba/
   class_a/
     subject_01/
       img_001.jpg
@@ -36,7 +58,7 @@ data/raw/photos/
 ### Metadata layout
 
 ```text
-data/raw/photos/
+data/raw/celeba/
   metadata.csv
   images/...
 ```
@@ -48,49 +70,42 @@ Supported metadata columns:
 - `gender` (optional)
 - `age` (optional)
 
-## 3. Auto Download (Default)
-
-```bash
-bash scripts/download_data.sh
-```
-
 ## 4. Verify and Prepare
 
 ```bash
-python scripts/prepare_datasets.py --verify --root data/raw/photos
-python scripts/prepare_datasets.py --build-metadata --root data/raw/photos
-python scripts/prepare_datasets.py --stats --root data/raw/photos
+python scripts/prepare_datasets.py --verify --root data/raw/celeba
+python scripts/prepare_datasets.py --stats --root data/raw/celeba
 ```
 
 ## 5. Train
 
 ```bash
-python scripts/train.py --config configs/experiment/photos_nvidia.yaml
+python scripts/train.py --config configs/experiment/celeba_nvidia.yaml
 ```
 
 ```bash
-python scripts/train.py --config configs/experiment/photos_baseline.yaml
+python scripts/train.py --config configs/experiment/celeba_baseline.yaml
 ```
 
 ## 6. Optional: Precompute Features
 
 ```bash
-python scripts/precompute_features.py --config configs/experiment/photos_baseline.yaml
-python scripts/train.py --config configs/experiment/photos_cached.yaml
+python scripts/precompute_features.py --config configs/experiment/celeba_baseline.yaml
+python scripts/train.py --config configs/experiment/celeba_cached.yaml
 ```
 
 ## 7. Evaluate
 
 ```bash
-python scripts/evaluate.py --checkpoint outputs/photos_nvidia/checkpoints/best_model.pt
+python scripts/evaluate.py --checkpoint outputs/celeba_nvidia/checkpoints/best_model.pt
 ```
 
 ## 8. Privacy-Utility Tradeoff Sweep
 
 ```bash
 python scripts/sweep_lambda.py \
-  --config configs/experiment/photos_baseline.yaml \
-  --epochs 50 \
+  --config configs/experiment/celeba_baseline.yaml \
+  --epochs 20 \
   --output_dir outputs/pareto
 ```
 
@@ -98,7 +113,7 @@ python scripts/sweep_lambda.py \
 
 ```bash
 python scripts/visualize.py \
-  --checkpoint outputs/photos_baseline/checkpoints/best_model.pt \
+  --checkpoint outputs/celeba_baseline/checkpoints/best_model.pt \
   --pareto_results outputs/pareto/sweep_results.json \
   --output_dir outputs/plots
 ```

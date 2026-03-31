@@ -82,7 +82,7 @@ def print_stats(root: Path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=str, default="data/raw/photos")
+    parser.add_argument("--root", type=str, default="data/raw/celeba")
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--build-metadata", action="store_true")
     parser.add_argument("--stats", action="store_true")

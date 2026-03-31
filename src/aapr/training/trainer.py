@@ -236,6 +236,8 @@ class Trainer:
             "optimizer_adv": self.optimizer_adv.state_dict(),
             "metrics": metrics,
         }
+        if self.feature_extractor is not None:
+            state["feature_extractor"] = self.feature_extractor.state_dict()
         torch.save(state, self.checkpoint_dir / f"checkpoint_epoch{epoch}.pt")
         if is_best:
             torch.save(state, self.checkpoint_dir / "best_model.pt")
@@ -245,6 +247,8 @@ class Trainer:
         self.privacy_filter.load_state_dict(state["privacy_filter"])
         self.task_model.load_state_dict(state["task_model"])
         self.adversary.load_state_dict(state["adversary"])
+        if self.feature_extractor is not None and "feature_extractor" in state:
+            self.feature_extractor.load_state_dict(state["feature_extractor"])
         self.optimizer_main.load_state_dict(state["optimizer_main"])
         self.optimizer_adv.load_state_dict(state["optimizer_adv"])
         return state["epoch"], state.get("metrics", {})

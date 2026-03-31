@@ -1,0 +1,16 @@
+_base_: ./celeba_baseline.yaml
+
+feature:
+  type: image_cnn
+  use_cache: true
+  cache_dir: data/processed/celeba_features
+
+model:
+  filter:
+    input_dim: 128
+
+output:
+  dir: outputs/celeba_cached
+  checkpoint_dir: outputs/celeba_cached/checkpoints
+  log_dir: outputs/celeba_cached/logs
+  tensorboard_dir: outputs/celeba_cached/tensorboard

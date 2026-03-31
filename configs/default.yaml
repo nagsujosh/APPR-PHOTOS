@@ -3,7 +3,7 @@ device: auto
 
 dataset:
   name: photos
-  root: data/raw/photos
+  root: data/raw/celeba
   metadata_filename: metadata.csv
   image_size: 224
   image_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
@@ -38,7 +38,7 @@ model:
     trunk_dim: 128
     heads:
       gender: 2
-      speaker_id: 10
+      speaker_id: 10177
     dropout: 0.3
 
 training:
@@ -57,7 +57,7 @@ training:
   distillation_temperature: 4.0
 
 output:
-  dir: outputs/photos_baseline
-  checkpoint_dir: outputs/photos_baseline/checkpoints
-  log_dir: outputs/photos_baseline/logs
-  tensorboard_dir: outputs/photos_baseline/tensorboard
+  dir: outputs/celeba_default
+  checkpoint_dir: outputs/celeba_default/checkpoints
+  log_dir: outputs/celeba_default/logs
+  tensorboard_dir: outputs/celeba_default/tensorboard

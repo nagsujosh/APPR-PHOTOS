@@ -7,7 +7,9 @@ import platform
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 if platform.system() == "Darwin":
     os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -84,6 +86,8 @@ def main():
     )
 
     state = load_checkpoint(args.checkpoint, device, weights_only=False)
+    if "feature_extractor" in state:
+        feature_extractor.load_state_dict(state["feature_extractor"])
     privacy_filter.load_state_dict(state["privacy_filter"])
     task_model.load_state_dict(state["task_model"])
     adversary.load_state_dict(state["adversary"])

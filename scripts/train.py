@@ -63,7 +63,7 @@ def build_feature_extractor(cfg):
     )
 
 
-def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger):
+def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger, num_classes):
     """Pre-train a teacher model on raw image features."""
     train_cfg = cfg["training"]
     teacher_epochs = train_cfg.get("teacher_pretrain_epochs", 30)
@@ -73,7 +73,7 @@ def pretrain_teacher(cfg, train_loader, feature_extractor, device, logger):
     teacher = TeacherModel(
         input_dim=filter_cfg.get("input_dim", 128),
         hidden_dim=256,
-        num_classes=cfg["dataset"].get("num_utility_classes", 2),
+        num_classes=num_classes,
         dropout=0.1,
     ).to(device)
 
@@ -226,7 +226,14 @@ def main():
     teacher = None
     if train_cfg.get("use_teacher", False) and feature_extractor is not None:
         feature_extractor.to(device)
-        teacher = pretrain_teacher(cfg, loaders["train"], feature_extractor, device, logger)
+        teacher = pretrain_teacher(
+            cfg,
+            loaders["train"],
+            feature_extractor,
+            device,
+            logger,
+            num_classes=num_classes,
+        )
         teacher_path = output_dir / "teacher.pt"
         torch.save(teacher.state_dict(), teacher_path)
         logger.info(f"Teacher saved to {teacher_path}")

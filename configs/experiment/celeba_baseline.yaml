@@ -2,8 +2,9 @@ _base_: ../default.yaml
 
 dataset:
   name: photos
-  root: data/raw/photos
+  root: data/raw/celeba
   batch_size: 64
+  num_workers: 4
 
 feature:
   type: image_cnn
@@ -17,7 +18,7 @@ model:
     output_dim: 128
     num_layers: 3
     use_vib: true
-    vib_beta: 0.01
+    vib_beta: 0.005
     dropout: 0.1
   task:
     hidden_dim: 256
@@ -26,26 +27,26 @@ model:
     trunk_dim: 128
     heads:
       gender: 2
-      speaker_id: 10
+      speaker_id: 10177
     dropout: 0.3
 
 training:
-  num_epochs: 100
+  num_epochs: 30
   lr_main: 0.001
   lr_adversary: 0.0005
-  lambda_privacy: 1.0
+  lambda_privacy: 0.1
   lambda_warmup_epochs: 10
   adversary_refresh_interval: 20
   adversary_retrain_epochs: 5
   grad_clip: 1.0
-  use_teacher: true
-  teacher_pretrain_epochs: 30
+  use_teacher: false
+  teacher_pretrain_epochs: 10
   teacher_lr: 0.001
-  distillation_alpha: 0.7
+  distillation_alpha: 0.0
   distillation_temperature: 4.0
 
 output:
-  dir: outputs/photos_baseline
-  checkpoint_dir: outputs/photos_baseline/checkpoints
-  log_dir: outputs/photos_baseline/logs
-  tensorboard_dir: outputs/photos_baseline/tensorboard
+  dir: outputs/celeba_baseline
+  checkpoint_dir: outputs/celeba_baseline/checkpoints
+  log_dir: outputs/celeba_baseline/logs
+  tensorboard_dir: outputs/celeba_baseline/tensorboard
